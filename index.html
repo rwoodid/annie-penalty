@@ -80,6 +80,21 @@ const GROUND=170,T0=26;let trail=[],embers=[],shake=0;
 function lsGet(k,d){try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 let hs=lsGet('annieHS',[]);if(!Array.isArray(hs))hs=[];
+// ---------- global (world) board: Supabase. The key below is the PUBLIC publishable key; the database only lets it
+// read scores and call submit_score(), which checks every entry. Any failure just falls back to the local board.
+const SB={url:'https://huuhvadkavsxkqtdvups.supabase.co',key:'sb_publishable_y5d1Y3Zkqcw_uj7T42OMRw_2VmZjGPb'};
+const gb={rows:[],state:'idle',at:-1e9,sub:'',mine:null};let board='world';
+function sbFetch(path,body){const c=typeof AbortController!=='undefined'?new AbortController():null,tm=setTimeout(()=>{if(c)c.abort()},6000);
+ return fetch(SB.url+'/rest/v1/'+path,{method:body?'POST':'GET',headers:{apikey:SB.key,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:c?c.signal:undefined})
+  .then(r=>r.json().catch(()=>null).then(j=>{clearTimeout(tm);if(!r.ok)throw new Error((j&&j.message)||('HTTP '+r.status));return j}),e=>{clearTimeout(tm);throw e})}
+function refreshGlobal(force){if(gb.state==='loading'||(!force&&performance.now()-gb.at<15000&&gb.state==='ok'))return;
+ gb.state='loading';gb.at=performance.now();
+ try{sbFetch('scores?select=initials,score,level&order=score.desc,created_at.asc&limit=10').then(j=>{
+   if(!Array.isArray(j))throw 0;gb.rows=j.map(r=>({n:String(r.initials).slice(0,3),s:r.score|0,l:r.level|0}));gb.state='ok'},()=>{gb.state='off'})}catch(e){gb.state='off'}}
+function sendGlobal(n,sc,lv){gb.sub='sending';gb.mine={n,s:sc};
+ try{sbFetch('rpc/submit_score',{p_initials:n,p_score:sc,p_level:lv}).then(()=>{gb.sub='sent';refreshGlobal(true)},e=>{gb.sub=/allowed/.test(e&&e.message)?'rude':'fail';refreshGlobal(true)})}catch(e){gb.sub='fail'}}
+refreshGlobal();
+function worldHigh(){return gb.state==='ok'&&(gb.rows.length<10||score>gb.rows[gb.rows.length-1].s)}
 let career=Math.max(+lsGet('annieCareer',0)||0,hs.reduce((a,h)=>a+(+h.s||0),0));
 let loadout=Object.assign({ball:'classic',kit:'home',stadium:'day',boots:'original'},lsGet('annieLocker',{}));
 let muted=!!lsGet('annieMute',false);
@@ -201,14 +216,14 @@ let aim={x:240,y:115,tx:240,ty:115,lx:240,ly:115},held={},drag=false;
 let kp={x:GX+GW/2,y:GROUND,tx:0,ty:0,tell:0,plan:{c:1,r:0}},ball={x:240,y:300,sx:240,sy:300,tx:0,ty:0,p:0,s:1};
 let joker=false,jokerUsed=false,jbonus=0,rivalBonus=0;
 let streak=0,hist=[],cond=null,wind=0,rain=[],lockSel={r:0,c:0},lockMsg='',lockT=0,dbg={};
-function isHigh(){return score>0&&(hs.length<10||score>hs[hs.length-1].s)}
+function isHigh(){return score>0&&(hs.length<10||score>hs[hs.length-1].s||worldHigh())}
 function sweet(){return Math.max(.1,.3-level*.018)} // width of green zone
 const PRESS={reach:1.27,react:1.27,read:.14}; // Chloe's pressure-moment boost
 function mult(s=streak){return s>=8?4:s>=5?3:s>=3?2:1}
 const COND={wind:{n:'WIND',c:'#8ef',d:'THE BALL WILL DRIFT - AIM INTO IT!'},rain:{n:'RAIN',c:'#6af',d:'SLIPPY POWER BAR - LOW SHOTS SKID'},
  crowd:{n:'CROWD NOISE',c:'#f8f',d:'HOSTILE CROWD - STEADY YOUR AIM!'},night:{n:'NIGHT GAME',c:'#ff8',d:'UNDER THE LIGHTS - KEEP YOUR NERVE'},
  sudden:{n:'SUDDEN DEATH',c:'#f33',d:'GOAL x3 - BUT A MISS COSTS 2 LIVES!'}};
-function newGame(){level=1;score=0;lives=3;streak=0;hist=[];cond=null;joker=false;jokerUsed=false;nextKick(true);S.whistle();}
+function newGame(){refreshGlobal();level=1;score=0;lives=3;streak=0;hist=[];cond=null;joker=false;jokerUsed=false;nextKick(true);S.whistle();}
 function planKeeper(){
  let plan=null;
  if(hist.length>=3){const cnt=[0,0,0];hist.forEach(h=>cnt[h.c]++);const fav=cnt.indexOf(Math.max(...cnt)),n=cnt[fav];
@@ -306,7 +321,7 @@ function after(){
  if(res==='goal'){level++;nextKick(true);S.whistle();return}
  if(lives<=0){lives=0;cond=null;rain=[];if(isHigh()){st='enter';ini=['A','A','A'];kpos=0;S.hi()}else{st='over';S.over()}t=0}else nextKick(false);
 }
-function submitHS(){hs.push({n:ini.join(''),s:score,l:level});hs.sort((a,b)=>b.s-a.s);hs=hs.slice(0,10);lsSet('annieHS',hs);st='table';t=0;S.select();}
+function submitHS(){sendGlobal(ini.join(''),score,level);board='world';hs.push({n:ini.join(''),s:score,l:level});hs.sort((a,b)=>b.s-a.s);hs=hs.slice(0,10);lsSet('annieHS',hs);st='table';t=0;S.select();}
 // ---------- locker ----------
 function lockBox(r,c){const n=ROWS[r].length,y=76+r*50;return n>4?{x:152+c*54,y,w:50,h:38}:{x:160+c*80,y,w:70,h:38}}
 function equip(r,c){const it=ROWS[r][c];if(!it)return;lockSel={r,c};
@@ -321,6 +336,7 @@ function pos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left-cv
 const LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.';
 function spin(i,d){kpos=i;const k=LETTERS.indexOf(ini[i]);ini[i]=LETTERS[(k+d+LETTERS.length)%LETTERS.length];S.blip()}
 const SLOTX=[190,260,330];
+function switchBoard(b){board=b;t=1;S.blip();if(b==='world')refreshGlobal()}
 function inR(p,x,y,w,h){return p.x>=x&&p.x<=x+w&&p.y>=y&&p.y<=y+h}
 function clampAim(){aim.tx=Math.max(GX-40,Math.min(GX+GW+40,aim.tx));aim.ty=Math.max(GY-35,Math.min(GROUND-4,aim.ty))}
 function setAim(p,touch){aim.tx=p.x;aim.ty=p.y-(touch?28:0);clampAim()}
@@ -329,7 +345,7 @@ cv.addEventListener('pointerup',e=>{if(st==='aim'&&drag){drag=false;lockAim()}})
 cv.addEventListener('pointerdown',e=>{au();if(e.pointerType==='touch')markTouch(true);const p=pos(e);e.preventDefault();
  if(p.x<56&&p.y>300){toggleMute();return}
  if(st==='title'){if(inR(p,225,238,150,56)){openLocker();return}newGame();return}
- if(st==='table'){if(inR(p,360,300,120,60)){openLocker();return}newGame();return}
+ if(st==='table'){if(inR(p,360,300,120,60)){openLocker();return}if(p.y<66&&p.x>100&&p.x<380){switchBoard(p.x<240?'world':'mine');return}newGame();return}
  if(st==='over'){st='table';t=0;S.blip();return}
  if(st==='locker'){for(let r=0;r<ROWS.length;r++)for(let c=0;c<ROWS[r].length;c++){const b=lockBox(r,c);if(p.x>b.x&&p.x<b.x+b.w&&p.y>b.y&&p.y<b.y+b.h){equip(r,c);return}}
   if(inR(p,30,304,145,56))closeLocker();return}
@@ -354,6 +370,7 @@ addEventListener('keydown',e=>{au();if(isTouch)markTouch(false);const k=e.key.to
   if(d==='u'||d==='d'){lockSel.r=(lockSel.r+(d==='u'?ROWS.length-1:1))%ROWS.length;lockSel.c=Math.min(lockSel.c,ROWS[lockSel.r].length-1)}
   if(d)S.blip();if(k===' '||k==='enter')equip(lockSel.r,lockSel.c);if(k==='l'||k==='escape'||k==='backspace')closeLocker();return}
  if(k==='l'&&(st==='title'||st==='table')){openLocker();return}
+ if(st==='table'&&(k==='g'||k==='tab')){e.preventDefault();switchBoard(board==='world'?'mine':'world');return}
  if(k==='j'&&jokerAvail()){playJoker();return}
  if(st==='joker'&&(k===' '||k==='enter')){e.preventDefault();if(t>30&&t<JW3)t=JW3;return}
  if(DIRK[k]){held[DIRK[k]]=true;e.preventDefault()}
@@ -562,6 +579,7 @@ function updateBall(){
 function loop(){t++;g.imageSmoothingEnabled=false;
  if(ac){const want=(st==='title'||st==='table'||st==='locker')?'title':(st==='aim'||st==='power'||st==='run'||st==='result'||st==='announce'||st==='joker')?'game':null;if(want!==mus.cur)setMusic(want);
   crowdLoop(cond==='crowd'&&!!want&&want==='game')}
+ if(st!=='table')gb.inT=0;
  if(st==='title'){pitch();g.fillStyle='rgba(0,0,0,.6)';g.fillRect(0,0,480,360);
   const bg=A('big');if(ok(bg))g.drawImage(bg,24,100+Math.sin(t/15)*4,108*.95,240*.95);
   showLogo(true);drawLogo();{const og=g;g=LX;try{popups()}finally{g=og}}
@@ -575,10 +593,17 @@ function loop(){t++;g.imageSmoothingEnabled=false;
  }
  else if(st==='table'||st==='over'){pitch();g.fillStyle='rgba(0,0,0,.75)';g.fillRect(0,0,480,360);
   if(st==='over'){txt('GAME OVER',240,140,44,'#f33');txt('FINAL SCORE '+score,240,190,20,'#ff0');txt('REACHED LEVEL '+level,240,220,16,'#0ff');txt('CAREER PTS '+career,240,244,14,'#f0f');if(t%60<40)txt(T('TAP TO CONTINUE','CLICK TO CONTINUE'),240,290,14,'#fff')}
-  else{txt('TOP TEN',240,50,32,'#ff0');if(!hs.length)txt('NO SCORES YET - BE THE FIRST!',240,170,14,'#fff');
+  else{if(!gb.inT){gb.inT=1;refreshGlobal()}
+   const W=board==='world',live=W&&gb.state==='ok',list=live?gb.rows:hs;
+   [['WORLD',120,true],['MY BEST',248,false]].forEach(([l,x,w])=>{const on=W===w;g.fillStyle=on?'#331':'#000';g.fillRect(x,16,112,36);g.strokeStyle=on?'#ff0':'#555';g.lineWidth=on?3:2;g.strokeRect(x,16,112,36);txt(l,x+56,42,on?20:17,on?'#ff0':'#888')});
+   const note=W?(gb.state==='loading'?(gb.rows.length?'UPDATING...':''):gb.state==='off'?'WORLD BOARD OFFLINE - SHOWING YOUR SCORES':'WORLD TOP TEN'):'YOUR BEST ON THIS DEVICE';
+   const sub=gb.sub==='sending'?'SENDING YOUR SCORE...':gb.sub==='fail'?'COULD NOT SEND - SAVED ON THIS DEVICE':gb.sub==='rude'?'THOSE INITIALS ARE NOT ALLOWED ONLINE':'';
+   txt(sub||note,240,68,10,sub?(gb.sub==='sending'?'#0ff':'#f80'):gb.state==='off'&&W?'#f80':'#aaa');
+   if(W&&gb.state==='loading'&&!gb.rows.length)txt('LOADING WORLD SCORES'+'...'.slice(0,(t/15|0)%4),240,170,14,'#0ff');
+   else if(!list.length)txt('NO SCORES YET - BE THE FIRST!',240,170,14,'#fff');
    {const bg=A('big');if(ok(bg))g.drawImage(bg,10,122+Math.sin(t/15)*2,86,191)} // Annie, foot on the ball, beside the table
-   hs.forEach((h,i)=>{const c=['#ff0','#ccc','#c84'][i]||'#fff';txt(String(i+1).padStart(2,' ')+'.',120,84+i*22,16,c,'left');txt(h.n,170,84+i*22,16,c,'left');txt(String(h.s).padStart(6,'0'),250,84+i*22,16,c,'left');txt('LV'+h.l,350,84+i*22,16,c,'left')});
-   if(t%60<40)txt(T('TAP TO PLAY','CLICK OR PRESS SPACE TO PLAY'),220,334,14,'#0ff');g.fillStyle='#000';g.fillRect(372,316,100,34);g.strokeStyle='#f0f';g.lineWidth=2;g.strokeRect(372,316,100,34);txt(T('LOCKER','LOCKER (L)'),422,338,13,'#f0f');if(t>600)st='title',t=0}
+   list.forEach((h,i)=>{const me=gb.mine&&h.n===gb.mine.n&&h.s===gb.mine.s;const c=me&&t%30<15?'#0f0':['#ff0','#ccc','#c84'][i]||'#fff';txt(String(i+1).padStart(2,' ')+'.',120,84+i*22,16,c,'left');txt(h.n,170,84+i*22,16,c,'left');txt(String(h.s).padStart(6,'0'),250,84+i*22,16,c,'left');txt('LV'+h.l,350,84+i*22,16,c,'left')});
+   if(t%60<40)txt(T('TAP TO PLAY','CLICK OR PRESS SPACE TO PLAY'),220,334,14,'#0ff');txt(T('TAP A TAB TO SWITCH BOARD','G: SWITCH BOARD'),220,352,10,'#888');g.fillStyle='#000';g.fillRect(372,316,100,34);g.strokeStyle='#f0f';g.lineWidth=2;g.strokeRect(372,316,100,34);txt(T('LOCKER','LOCKER (L)'),422,338,13,'#f0f');if(t>600)st='title',t=0}
  }
  else if(st==='enter'){g.fillStyle='#000';g.fillRect(0,0,480,360);const sm=A('sml');if(ok(sm))g.drawImage(sm,20,30);
   txt('NEW HIGH SCORE!',260,46,26,'#ff0');txt(String(score).padStart(6,'0'),260,78,24,'#fff');txt(T('TAP THE ARROWS FOR YOUR INITIALS','TYPE OR USE ARROWS FOR INITIALS'),260,104,12,'#0ff');
