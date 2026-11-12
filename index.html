@@ -271,8 +271,12 @@ function shoot(){
  if(pl.c===1){kp.mode='jump';kp.tx=GX+GW/2;kp.high=pl.r===0||(ball.saved&&ty<GY+50)}
  else{kp.mode='dive';kp.dir=pl.c===0?-1:1;if(ball.saved)kp.dir=tx<kp.x?-1:1;kp.tx=hx-kp.dir*(ok(kD())?kD().width:118)*.36;kp.ty=Math.min(GROUND-30,hy+12)}
  ball.tx=tx;ball.ty=ty;ball.kind=kind;ball.green=inGreen;ball.weak=weak;ball.fire=streak>=5||loadout.ball==='fire';
- ball.D=Math.max(11,19-level*.6)+(weak?8:0)-(inGreen?1:0)-(tooHard?2:0);
- kp.KD=Math.max(9,(16-level*.5)*(FU?.85:1));kp.start=ball.saved?Math.round(T0+ball.D*.85-kp.KD+1):Math.max(T0-6,T0+Math.max(1,8-level)-(FU?3:0)+(joker?6:0)+K.start);
+ // flight time reflects the power bar (visual only - save/goal is already decided above):
+ // pf = 1.45 at zero power, 1.0 at 60% (about the old speed), 0.55 at full power; low shots also float with a higher arc
+ const pf=pow<.6?1+(.6-pow)/.6*.45:1-(Math.min(1,pow)-.6)/.4*.45;
+ ball.D=Math.max(6,Math.max(11,19-level*.6)*pf+(weak?3:0)-(inGreen?1:0));ball.arc=1.35-.55*Math.min(1,pow);
+ kp.KD=Math.max(9,(16-level*.5)*(FU?.85:1));if(ball.saved)kp.KD=Math.min(kp.KD,Math.max(5,Math.round(ball.D*.85)));// fast shots: quicker save dive so it still starts after the kick and meets the ball
+ kp.start=ball.saved?Math.round(T0+ball.D*.85-kp.KD+1):Math.max(T0-6,T0+Math.max(1,8-level)-(FU?3:0)+(joker?6:0)+K.start);
  kp.readYou=(pl.learned||pl.read)&&pl.c===z.c;kp.wrongWay=pl.c!==1&&z.c!==1&&pl.c!==z.c;
  hist.push(z);if(hist.length>6)hist.shift();
 }
@@ -547,7 +551,7 @@ function updateBall(){
   if(t>=T0&&!ball.hit){const p=Math.min(1,(t-T0)/ball.D),e=1-Math.pow(1-p,1.6);
    if(ball.saved&&p>=.85){ball.hit=true;ball.tx=ball.x+(ball.x<240?-1:1)*(60+Math.random()*60);ball.ty=GY-30-Math.random()*20;resolve();S.save()}
    else{trail.push({x:ball.x,y:ball.y,r:ball.s*6});if(trail.length>(ball.fire?8:5))trail.shift();
-    ball.x=ball.sx+(ball.tx-ball.sx)*e-(ball.drift||0)*(e-e*e)*1.6;ball.y=ball.sy+(ball.ty-ball.sy)*e-Math.sin(p*Math.PI)*(ball.ty<GY+40?40:18);ball.s=1-e*.5;ball.ang+=.5;ball.gy=ball.sy+(Math.min(Math.max(ball.ty,GY+GH),GROUND+60)-ball.sy)*e+ball.s*7;
+    ball.x=ball.sx+(ball.tx-ball.sx)*e-(ball.drift||0)*(e-e*e)*1.6;ball.y=ball.sy+(ball.ty-ball.sy)*e-Math.sin(p*Math.PI)*(ball.ty<GY+40?40:18)*(ball.arc||1);ball.s=1-e*.5;ball.ang+=.5;ball.gy=ball.sy+(Math.min(Math.max(ball.ty,GY+GH),GROUND+60)-ball.sy)*e+ball.s*7;
     if(p>=1)resolve();}}}
  if(st==='result'){if(trail.length)trail.shift();
   if(res==='save'){ball.x+=(ball.tx-ball.x)*.07;ball.y+=(ball.ty-ball.y)*.07;ball.ang+=.3;ball.s=Math.max(.35,ball.s-.004);ball.gy=0}
