@@ -391,10 +391,10 @@ function tryTrick(id,tStart){if(st!=='play'||!id)return; // tStart = when the sw
   lerpTo(TX+L.x,GY-L.y,.18,()=>{setPose('htwseq',L.d);ball.mode='float';ball.fl={x:TX+L.x,y:GY-L.y,t0:gt,d:L.d}})}
  else if(id==='atw'){const L=LOWT.atw;trick.t0=gt+.18;trick.d=L.d;setPose('kick',.18); // flick it up a little, then the foot circles it
   lerpTo(TX+L.x,GY-L.y,.18,()=>{setPose('atwseq',L.d);ball.mode='float';ball.fl={x:TX+L.x,y:GY-L.y,t0:gt,d:L.d}})}
- else{trick.t0=gt+.18;trick.d=XOV.d;setPose('xov1',.18); // crossover: pop it up gently, legs cross to touch it on her left, cross back the other way to touch it on her right, uncross for the catch
+ else{trick.t0=gt+.18;trick.d=XOV.d;setPose('xov1',.3); // crossover: pop it up gently, legs cross to touch it on her left, cross back the other way to touch it on her right, uncross for the catch
   lerpTo(TX+XOV.a[0],GY-XOV.a[1],.18,()=>{ball.mode='xov';ball.xv={t0:gt,n:0}})}}
 // crossover: where the ball is touched (centre, game px from her feet) and where her crossing boot is in xov2 / xov3
-const XOV={a:[-40,73],b:[66,86],bootA:[-43,58],bootB:[71,71],d:.56};
+const XOV={a:[-40,73],b:[66,86],bootA:[-43,58],bootB:[71,71],h1:.3,tr:.22,d:.78}; // h1: hold on the first cross (her left); tr: ball floats across; then hold on the second cross until d
 const LOWT={atw:{x:-25,y:76,d:.64,j:0},htw:{x:-37,y:98,d:.7,j:0}}; // where the ball hangs while the trick is played round it
 function timeUp(){if(chain)noteNear(chainSeq,null);st='timeup';t=0;S.timeup();setPose('cheer',99);trick=null;kseq='';
  if(ball.mode==='fly'||ball.mode==='lerp'||ball.mode==='stall'||ball.mode==='float'||ball.mode==='hdr'||ball.mode==='hold'){ball.vx=20;ball.vy=-200;ball.mode='drop';ball.behind=false}missT=gt+99;
@@ -534,9 +534,10 @@ function updBall(){const b=ball;
   if(k>=1){const f=contactPt('foot');setPose(trick&&trick.id==='htw'?'htw5':'kick',.15);flyTo(f.x,f.y,.85,'foot')}}
  else if(b.mode==='xov'){const X=b.xv,e=gt-X.t0,A=XOV.a,B=XOV.b;b.ang+=dt*5;
   if(X.n===0){X.n=1;S.touch(false,0)}
-  if(e<.12){b.x=TX+A[0];b.y=GY-A[1];setPose('xov2',.05)}
-  else if(e<.42){const k=(e-.12)/.3,sm=k*k*(3-2*k);b.x=TX+A[0]+(B[0]-A[0])*sm;b.y=GY-(A[1]+(B[1]-A[1])*sm)-Math.sin(Math.PI*k)*34;setPose(k<.25?'xov2':k<.7?'xov1':'xov3',.05)}
-  else if(e<XOV.d){if(X.n===1){X.n=2;S.touch(false,0)}b.x=TX+B[0];b.y=GY-B[1];setPose('xov3',.05)}
+  const t1=XOV.h1,t2=XOV.h1+XOV.tr,bob=u=>Math.sin(Math.PI*Math.min(1,u))*7; // the ball hangs, nudged up a touch by each cross
+  if(e<t1){b.x=TX+A[0];b.y=GY-A[1]-bob(e/t1);setPose('xov2',.05)}
+  else if(e<t2){const k=(e-t1)/XOV.tr,sm=k*k*(3-2*k);b.x=TX+A[0]+(B[0]-A[0])*sm;b.y=GY-(A[1]+(B[1]-A[1])*sm)-Math.sin(Math.PI*k)*30;setPose(k<.55?'xov1':'xov3',.05)}
+  else if(e<XOV.d){if(X.n===1){X.n=2;S.touch(false,0);S.whoosh()}b.x=TX+B[0];b.y=GY-B[1]-bob((e-t2)/(XOV.d-t2));setPose('xov3',.05)}
   else{setPose('xov4',.22);const f=contactPt('foot');flyTo(f.x,f.y,.85,'foot')}}
  else if(b.mode==='hdr'){const D=b.hd,e=gt-D.t0,i=Math.floor(e/D.T);
   if(i>=D.n){setPose('head',.18);const f=contactPt('foot');flyTo(f.x,f.y,.95,'foot')}
@@ -602,13 +603,22 @@ function trickFX(){if(!trick)return;const k=(gt-trick.t0)/trick.d;if(k<0||k>1)re
  if(trick.id==='atw'||trick.id==='htw'){const a=Math.PI/2-k*2*Math.PI; // swoosh following her boot round the ball: under -> inside -> over -> outside
   for(let j=0;j<9;j++){g.strokeStyle='rgba(255,255,'+(j<3?255:120)+','+(.95-j*.1)+')';g.lineWidth=5-j*.45;g.beginPath();g.ellipse(ball.x,ball.y,25,22,0,a+j*.24,a+(j+1)*.24+.03);g.stroke()}
   g.fillStyle='#ff0';g.fillRect(Math.round(ball.x+25*Math.cos(a))-3,Math.round(ball.y+22*Math.sin(a))-3,6,6)}
-  else if(trick.id==='xover'&&ball.mode==='xov'){const e=gt-ball.xv.t0,p=Math.max(0,Math.min(1,(e-.12)/.3)),A=XOV.bootA,B=XOV.bootB,x0=TX+A[0],y0=GY-A[1],x1=TX+B[0],y1=GY-B[1],cx=TX+12,cy=GY-14,fade=e>.42?Math.max(0,1-(e-.42)/.14):1;
-  // boot trail: her far foot sweeps low across in front of her standing leg, from the left-side touch to the right-side touch
-  const P=u=>[(1-u)*(1-u)*x0+2*u*(1-u)*cx+u*u*x1,(1-u)*(1-u)*y0+2*u*(1-u)*cy+u*u*y1],N=16;
-  for(let j=0;j<N;j++){const a0=P(j/N*p),a1=P((j+1)/N*p),w=(j+1)/N;g.strokeStyle='rgba(255,255,'+(w>.7?255:120)+','+(.25+.7*w)*fade+')';g.lineWidth=1.5+3.5*w;g.beginPath();g.moveTo(a0[0],a0[1]);g.lineTo(a1[0],a1[1]);g.stroke()}
-  if(p>0&&fade>0){const h=P(p);g.fillStyle='rgba(255,255,0,'+fade+')';g.fillRect(Math.round(h[0])-3,Math.round(h[1])-3,6,6)}
-  if(e<.12){g.strokeStyle='rgba(255,255,255,'+(1-e/.12)+')';g.lineWidth=2;g.beginPath();g.arc(TX+XOV.a[0],GY-XOV.a[1],BR+4+e*60,0,7);g.stroke()}
-  if(e>.42&&e<XOV.d){const q=(e-.42)/.14;g.strokeStyle='rgba(255,255,255,'+(1-q)+')';g.lineWidth=2;g.beginPath();g.arc(TX+XOV.b[0],GY-XOV.b[1],BR+4+q*8,0,7);g.stroke()}}}
+  else if(trick.id==='xover'&&(ball.mode==='xov'||ball.mode==='lerp'||ball.mode==='hold')){const e=gt-trick.t0,t1=XOV.h1,t2=XOV.h1+XOV.tr,A=XOV.bootA,B=XOV.bootB;
+  // boot trail drawn with a dark outline so it reads on the grass: cross 1 = right boot swings across in front to her left; cross 2 = it sweeps back low to her right
+  const curve=(x0,y0,cx,cy,x1,y1)=>u=>[(1-u)*(1-u)*x0+2*u*(1-u)*cx+u*u*x1,(1-u)*(1-u)*y0+2*u*(1-u)*cy+u*u*y1];
+  const tr=(P,p,fade)=>{if(p<=0||fade<=0)return;const N=14;g.lineCap='round';
+   for(let pass=0;pass<2;pass++)for(let j=0;j<N;j++){const a0=P(j/N*p),a1=P((j+1)/N*p),w=(j+1)/N,lw=2+6*w;
+    g.strokeStyle=pass?'rgba(255,255,'+(w>.6?120:255)+','+(.35+.65*w)*fade+')':'rgba(0,0,0,'+.45*w*fade+')';g.lineWidth=pass?lw:lw+3;g.beginPath();g.moveTo(a0[0],a0[1]);g.lineTo(a1[0],a1[1]);g.stroke()}
+   const h=P(p);g.fillStyle='rgba(255,230,0,'+fade+')';g.fillRect(Math.round(h[0])-4,Math.round(h[1])-4,8,8);g.lineCap='butt'};
+  const whoosh=(x,y,u,side)=>{if(u<0||u>1)return;const r=BR+9+u*12,al=1-u*u,mid=side<0?Math.PI*.55:Math.PI*.45,span=Math.PI*.8,a0=mid-span/2,a1=mid+span/2; // bold crescent under/around the ball as the boot whips through
+   g.lineCap='round';g.strokeStyle='rgba(0,0,0,'+.45*al+')';g.lineWidth=10;g.beginPath();g.arc(x,y,r,a0,a1);g.stroke();
+   g.strokeStyle='rgba(255,255,255,'+al+')';g.lineWidth=7-u*3;g.beginPath();g.arc(x,y,r,a0,a1);g.stroke();
+   g.strokeStyle='rgba(120,240,255,'+al+')';g.lineWidth=2;g.beginPath();g.arc(x,y,r+6,a0+.25,a1-.25);g.stroke();
+   for(let j=0;j<3;j++){const yy=y-8+j*8,x0=x-side*(r+6),L=(14-j*3)*(1-u*.5);g.strokeStyle='rgba(0,0,0,'+.4*al+')';g.lineWidth=5;g.beginPath();g.moveTo(x0,yy);g.lineTo(x0-side*L,yy);g.stroke();
+    g.strokeStyle='rgba(255,255,255,'+al+')';g.lineWidth=3;g.beginPath();g.moveTo(x0,yy);g.lineTo(x0-side*L,yy);g.stroke()}g.lineCap='butt'};
+  tr(curve(TX+20,GY-8,TX+2,GY-34,TX+A[0],GY-A[1]),Math.max(0,Math.min(1,(e+.14)/.16)),e<t1?1:Math.max(0,1-(e-t1)/.12));
+  tr(curve(TX+A[0],GY-A[1],TX+12,GY-14,TX+B[0],GY-B[1]),Math.max(0,Math.min(1,(e-t1)/XOV.tr)),e<t2?1:Math.max(0,1-(e-t2)/(XOV.d-t2+.1)));
+  whoosh(TX+XOV.a[0],GY-XOV.a[1],(e+.03)/.28,-1);whoosh(TX+XOV.b[0],GY-XOV.b[1],(e-t2+.03)/.28,1)}}
 function drawTrail(){const pts=gest?gest.pts:trail&&gt-trail.t0<.4?trail.pts:null;if(!pts||pts.length<2)return;g.strokeStyle=gest?'rgba(255,255,255,.7)':(trail.ok?'rgba(0,255,255,'+(1-(gt-trail.t0)/.4)+')':'rgba(255,120,0,.5)');g.lineWidth=4;g.lineCap='round';
  g.beginPath();g.moveTo(pts[0].x,pts[0].y);pts.forEach(p=>g.lineTo(p.x,p.y));g.stroke();g.lineCap='butt'}
 function fmtT(s){s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
