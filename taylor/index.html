@@ -293,8 +293,9 @@ function nextType(){const r=Math.random();if(combo>=14&&r<.2)return 'head';if(co
 // ---------- round ----------
 function startGame(){score=0;timeLeft=60;elapsed=0;combo=0;maxCombo=0;touches=0;tricksN=0;perfects=0;mIdx=0;shieldUsed=false;lockUntil=0;lastTrick='';hintIdx=0;
  trick=null;pend=null;fx=[];banner=null;trail=null;roundLanded={};newBest=false;kseq='';
- ball.mode='rest';ball.x=TX-34;ball.y=GY-BR;ball.behind=false;setPose('ready',0);st='play';t=0;startAt=gt+1.0;S.whistle();refreshGlobal()}
-function kickOff(){setPose('kick',.2);const p=contactPt('foot');ball.x=TX-30;ball.y=GY-BR-6;flyTo(p.x,p.y,1.15,'foot');S.touch(false,0)}
+ ball.mode='rest';ball.x=TX-34;ball.y=GY-BR;ball.behind=false;setPose('ready',0);st='play';t=0;startAt=gt;S.whistle();refreshGlobal()} // ball waits at her feet; the clock starts on the first tap
+function kickOff(first){setPose('kick',.28);const p=contactPt('foot');ball.x=TX-32;ball.y=GY-BR-2;flyTo(p.x,p.y,first?1.2:1.15,'foot');ball.ang=0;S.touch(false,0);S.whoosh();
+ if(first){addFx('FLICK!',TX-60,GY-60,'#0ff',16,.7);for(let i=0;i<8;i++)fx.push({s:'.',x:TX-32+(Math.random()-.5)*30,y:GY-2,c:'#c8e6a0',sz:14,t0:gt,dur:.4+Math.random()*.3})}}
 function hit(perf){const type=ball.ctype;touches++;combo++;maxCombo=Math.max(maxCombo,combo);if(perf)perfects++;
  const m=mult(combo);let pts=(perf?100:50)*m;
  addFx(perf?'PERFECT':'GOOD',ball.cx+(type==='head'?40:-34),ball.cy-6,perf?'#ff0':'#0f0',perf?15:13,.6);
@@ -312,14 +313,17 @@ function miss(){S.drop();if(pend){addFx('TRICK DROPPED',W/2,190,'#f66',16,1.2);p
  if(loadout.boost==='shield'&&!shieldUsed&&combo>0){shieldUsed=true;addFx('SHIELD SAVED YOUR COMBO!',W/2,214,'#0ff',12,1.5)}else combo=0;
  const s=ball.seg,tau=gt-s.t0;ball.vx=(s.x1-s.x0)/s.T*.5+(Math.random()-.5)*60;ball.vy=s.v0+s.G*tau;ball.mode='drop';missT=gt;trick=null;ball.behind=false;setPose('miss',1.15);
  addFx('DROPPED!',W/2,170,'#f44',18,1)}
-function tap(){if(st!=='play')return;const tt=nowG();
- if(ball.mode!=='fly'||tt<lockUntil)return;
+function tap(tt){if(st!=='play')return;if(tt==null)tt=nowG();
+ if(ball.mode==='rest'){kickOff(true);return} // first tap of the round flicks the ball up and starts the clock
+ if(ball.mode!=='fly'){toast(ball.mode==='drop'?'SHE WILL FLICK IT BACK UP!':'WAIT FOR THE BALL!','#ff0');return}
+ if(tt<lockUntil)return;
  const d=tt-ball.tc,w=wmul();
  if(Math.abs(d)<=PERF*w)hit(true);else if(Math.abs(d)<=GOOD*w)hit(false);
- else if(d<0&&d>-EARLY){lockUntil=tt+.2;addFx('TOO EARLY',ball.cx-40,ball.cy-6,'#f80',12,.5);S.early()}}
-function tryTrick(id){if(st!=='play'||!id)return;
+ else if(d<0&&d>-EARLY){lockUntil=tt+.2;addFx('TOO EARLY',ball.cx-40,ball.cy-6,'#f80',12,.5);S.early()}
+ else if(d<0){addFx('TOO EARLY',ball.cx-40,ball.cy-6,'#f80',12,.5);toast('TAP WHEN THE BALL HITS THE RING','#ff0');S.early()}}
+function tryTrick(id,tStart){if(st!=='play'||!id)return; // tStart = when the swipe began: a slow swipe that started in time still counts
  if(ball.mode!=='fly'||trick||pend){toast(ball.mode==='fly'?'ONE TRICK PER TOUCH!':'WAIT FOR THE BALL!');return}
- const rem=ball.tc-gt;if(rem<MINREM){toast('TOO LATE - TRICK WHILE THE BALL IS HIGH');S.early();return}
+ const rem=Math.max(ball.tc-(tStart==null?gt:tStart),0)*(ball.tc-gt>.08?1:0);if(rem<MINREM){toast('TOO LATE - TRICK WHILE THE BALL IS HIGH');S.early();return}
  pend={id};trick={id,t0:gt,d:.5,jump:0};S.whoosh();addFx(TRICKS[id].n,W/2,118,'#fff',12,.7);
  if(id==='rainbow'){const h=cpt('rainbow');setPose('rainbow',.62);ball.behind=true;trick.d=.62;
   lerpTo(h.x,h.y,.22,()=>{ball.behind=false;const f=contactPt('foot');flyTo(f.x,f.y,1.0,'foot');ball.seg.arc=46})}
@@ -376,6 +380,9 @@ function inR(p,x,y,w,h){return p.x>=x&&p.x<=x+w&&p.y>=y&&p.y<=y+h}
 const BTN={locker:[28,456,144,30],scores:[188,456,144,30],annie:[44,500,308,32],mute:[0,500,40,40],back:[120,494,120,30],tabW:[24,58,150,26],tabM:[186,58,150,26],led:[0,118,W,28]};
 function onBtn(p,k){const b=BTN[k];return inR(p,b[0],b[1],b[2],b[3])}
 function nowG(){return gt+(window.__FIXED?0:Math.min(1/60,Math.max(0,(performance.now()-lastReal)/1000)))}
+const TOUCH_LAG=.035; // phone touchscreens report taps ~30-60ms late; judge touch taps a little earlier so on-time taps count
+function evG(e,touch){if(window.__FIXED)return gt;let ts=e.timeStamp,n=performance.now();if(!(ts>0)||Math.abs(ts-n)>1000)ts=n; // old Safari used epoch timestamps
+ return gt+Math.min(1/60,Math.max(-.05,(ts-lastReal)/1000))-(touch?TOUCH_LAG:0)}
 let gest=null,linkPending=null,kseq='',kLast=0;
 // gesture recogniser: circle by total turning; otherwise strokes quantised to up/down/left/right
 function recognise(pts){let L=0;for(let i=1;i<pts.length;i++)L+=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);if(L<22)return 'tap';
@@ -395,8 +402,8 @@ function recognise(pts){let L=0;for(let i=1;i<pts.length;i++)L+=Math.hypot(pts[i
 function classify(s){if(s==='u')return 'rainbow';if(s==='d')return 'neck';if(s==='ud'||s==='du'||s==='udu'||s==='dud')return 'htw';if(/^[lr]+$/.test(s))return 'xover';
  if(s.length>=3&&isRot(s))return 'atw';return null}
 function isRot(s){const cw='urdl';let dir=0;for(let i=1;i<s.length;i++){const a=cw.indexOf(s[i-1]),b=cw.indexOf(s[i]),k=(b-a+4)%4,dd=k===1?1:k===3?-1:0;if(!dd||(dir&&dd!==dir))return false;dir=dd}return true}
-function endGesture(gs){const id=recognise(gs.pts);trail={pts:gs.pts,t0:gt,ok:id&&id!=='tap'};if(id==='tap'){trail=null;return}
- if(!id){toast('TRICK NOT RECOGNISED - TRY AGAIN');return}tryTrick(id)}
+function endGesture(gs,tUp){const id=recognise(gs.pts);trail={pts:gs.pts,t0:gt,ok:id&&id!=='tap'};if(id==='tap'){trail=null;tap(ball.mode==='fly'&&Math.abs(tUp-ball.tc)<=GOOD*wmul()?tUp:gs.t0);return}
+ if(!id){toast('TRICK NOT RECOGNISED - TRY AGAIN');return}tryTrick(id,gs.t0)}
 function fireKeys(){const s=kseq;kseq='';const id=classify(s);if(id)tryTrick(id);else toast('TRICK NOT RECOGNISED - TRY AGAIN')}
 function menuClick(p){
  if(st==='title'){if(onBtn(p,'locker')){st='locker';t=0;S.select();return}if(onBtn(p,'scores')){st='table';t=0;board='world';refreshGlobal(true);S.select();return}
@@ -407,18 +414,26 @@ function menuClick(p){
  if(st==='table'){if(onBtn(p,'tabW')){board='world';refreshGlobal(true);S.blip();return}if(onBtn(p,'tabM')){board='mine';S.blip();return}st='title';t=0;S.blip();return}
  if(st==='locker'){for(let r=0;r<3;r++)for(let c=0;c<ROWS[r].length;c++){const b=lockBox(r,c);if(inR(p,b.x,b.y,b.w,b.h)){equip(r,c);return}}
   if(onBtn(p,'back')||p.y>480){st='title';t=0;S.blip()}}}
-cv.addEventListener('pointerdown',e=>{if(e.pointerType)markTouch(e.pointerType!=='mouse');au();e.preventDefault();const p=pos(e);linkPending=null;
+// input listens on the whole page, not just the canvas: on a phone in portrait there are bars above/below the pitch,
+// and taps near the bottom of the canvas can land outside it - every tap anywhere on the screen counts
+function onDown(e){const touch=e.pointerType!=='mouse';if(e.pointerType)markTouch(touch);try{au()}catch(_){}if(e.cancelable!==false)e.preventDefault();const p=pos(e);linkPending=null;
  if(onBtn(p,'mute')){toggleMute();return}
- if(st==='play'){const tt=nowG();
-  if(ball.mode==='fly'&&ball.tc-tt<=WIN_OPEN){tap();gest=null;return}
-  gest={pts:[p],t0:tt,id:e.pointerId};try{cv.setPointerCapture(e.pointerId)}catch(_){}return}
- menuClick(p)});
-cv.addEventListener('pointermove',e=>{const p=pos(e);
- if(gest&&e.pointerId===gest.id){const evs=e.getCoalescedEvents?e.getCoalescedEvents():[];(evs.length?evs.map(pos):[p]).forEach(q=>{const l=gest.pts[gest.pts.length-1];if(Math.hypot(q.x-l.x,q.y-l.y)>=2)gest.pts.push(q)})}
- if(e.pointerType==='mouse'){const over=(st==='title'&&(onBtn(p,'locker')||onBtn(p,'scores')||onBtn(p,'annie')||(onBtn(p,'led')&&ledSponsor())))||onBtn(p,'mute')||(st==='table'&&(onBtn(p,'tabW')||onBtn(p,'tabM')))||st==='locker';cv.style.cursor=over?'pointer':'default'}});
-cv.addEventListener('pointerup',e=>{if(gest&&e.pointerId===gest.id){const gs=gest;gest=null;endGesture(gs)}
- if(linkPending){const u=linkPending;linkPending=null;if(u.indexOf('anniepenalty')>=0)location.href=u;else try{window.open(u,'_blank','noopener')}catch(_){}}});
-cv.addEventListener('pointercancel',()=>{gest=null;linkPending=null});
+ if(st==='play'){const tt=evG(e,touch);
+  if(ball.mode==='rest'||(ball.mode==='fly'&&ball.tc-tt<=WIN_OPEN)){tap(tt);gest=null;return}
+  gest={pts:[p],t0:tt,id:e.pointerId,touch};try{if(e.target===cv)cv.setPointerCapture(e.pointerId)}catch(_){}return}
+ menuClick(p)}
+function onMove(e){const p=pos(e);
+ if(gest&&e.pointerId===gest.id){const evs=e.getCoalescedEvents?e.getCoalescedEvents():[];(evs&&evs.length?evs.map(pos):[p]).forEach(q=>{const l=gest.pts[gest.pts.length-1];if(Math.hypot(q.x-l.x,q.y-l.y)>=2)gest.pts.push(q)})}
+ if(e.pointerType==='mouse'){const over=(st==='title'&&(onBtn(p,'locker')||onBtn(p,'scores')||onBtn(p,'annie')||(onBtn(p,'led')&&ledSponsor())))||onBtn(p,'mute')||(st==='table'&&(onBtn(p,'tabW')||onBtn(p,'tabM')))||st==='locker';cv.style.cursor=over?'pointer':'default'}}
+function onUp(e){if(gest&&e.pointerId===gest.id){const gs=gest;gest=null;gs.pts.push(pos(e));endGesture(gs,evG(e,gs.touch))}
+ if(linkPending){const u=linkPending;linkPending=null;if(u.indexOf('anniepenalty')>=0)location.href=u;else try{window.open(u,'_blank','noopener')}catch(_){}}}
+if(window.PointerEvent){document.addEventListener('pointerdown',onDown,{passive:false});document.addEventListener('pointermove',onMove);document.addEventListener('pointerup',onUp);
+ document.addEventListener('pointercancel',()=>{gest=null;linkPending=null})}
+else{const T2=(e,t)=>({clientX:t.clientX,clientY:t.clientY,pointerId:t.identifier,pointerType:'touch',timeStamp:e.timeStamp,cancelable:e.cancelable,target:e.target,preventDefault:()=>e.preventDefault()});
+ document.addEventListener('touchstart',e=>{if(e.target.closest&&e.target.closest('#ent,#rules'))return;onDown(T2(e,e.changedTouches[0]))},{passive:false});
+ document.addEventListener('touchmove',e=>{for(const t of e.changedTouches)onMove(T2(e,t))},{passive:false});
+ document.addEventListener('touchend',e=>{for(const t of e.changedTouches)onUp(T2(e,t))});
+ document.addEventListener('mousedown',e=>onDown(Object.assign({},{clientX:e.clientX,clientY:e.clientY,pointerId:1,pointerType:'mouse',timeStamp:e.timeStamp,target:e.target,preventDefault:()=>e.preventDefault()})))}
 const DIRK={arrowleft:'l',a:'l',arrowright:'r',d:'r',arrowup:'u',w:'u',arrowdown:'d',s:'d'};
 addEventListener('keydown',e=>{if(formOpen)return;const k=e.key.toLowerCase();au();
  if(k==='m'){toggleMute();return}
@@ -433,7 +448,7 @@ addEventListener('keydown',e=>{if(formOpen)return;const k=e.key.toLowerCase();au
 // ---------- update ----------
 function update(){t+=dt;
  if(st==='play'){
-  if(ball.mode==='rest'){if(gt>=startAt)kickOff()}
+  if(ball.mode==='rest'){} // waiting for the first tap: no clock yet
   else{elapsed+=dt;timeLeft-=dt;const sec=Math.ceil(timeLeft);if(timeLeft<=5&&sec!==lastTick&&sec>0){lastTick=sec;S.tick()}
    if(hintIdx<5&&elapsed>=HINT_AT[hintIdx]){const id=TORDER[hintIdx];hintIdx++;if((save.landed[id]||0)<2&&!roundLanded[id])banner={id,t0:gt}}
    if(timeLeft<=0){timeLeft=0;timeUp()}}}
@@ -569,7 +584,8 @@ function loop(){const now=performance.now();dt=window.__FIXED?1/60:Math.min(.05,
  g.drawImage(bgc,0,0);led();
  if(st==='title'){drawTitle();showLogo(true);drawLogo()}else showLogo(false);
  if(st==='play'||st==='timeup'||st==='enter'){if(ball.behind)drawBall();drawTaylor();trickFX();if(!ball.behind)drawBall();ring();drawTrail();hud();drawFx();drawBanner();
-  if(st==='play'&&ball.mode==='rest')txt('GET READY!',W/2,180,24,fr%16<8?'#ff0':'#fff');
+  if(st==='play'&&ball.mode==='rest'){txt(T('TAP TO FLICK IT UP','CLICK OR SPACE TO FLICK IT UP'),W/2,180,T(22,16),fr%40<26?'#ff0':'#fff');txt('THE CLOCK STARTS ON YOUR FIRST TOUCH',W/2,202,10,'#fff');
+   const ay=GY-BR-30-Math.abs(Math.sin(gt*5))*10;g.fillStyle='#ff0';g.strokeStyle='#000';g.lineWidth=2;g.beginPath();g.moveTo(ball.x-9,ay-12);g.lineTo(ball.x+9,ay-12);g.lineTo(ball.x,ay);g.closePath();g.fill();g.stroke()}
   if(st==='timeup')drawTimeup();if(st==='enter'){g.fillStyle='rgba(0,0,0,.4)';g.fillRect(0,0,W,H)}}
  if(st==='table')drawTable();if(st==='locker')drawLocker();
  if(st!=='play')popups();
