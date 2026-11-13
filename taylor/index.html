@@ -275,7 +275,7 @@ ITEMS.forEach(it=>{if(loadout[it.type]===it.id&&!unlocked(it))loadout[it.type]=R
 let pops=[],lockSel={r:0,c:0};
 // ---------- state ----------
 let st='title',t=0,fr=0,gt=0,lastReal=0,dt=1/60;
-let score=0,timeLeft=60,elapsed=0,combo=0,maxCombo=0,touches=0,tricksN=0,perfects=0,mIdx=0,shieldUsed=false,lockUntil=0,lastTrick='',hintIdx=0,missT=0,startAt=0,lastTick=0,newBest=false;
+let clockOn=false,score=0,timeLeft=60,elapsed=0,combo=0,maxCombo=0,touches=0,tricksN=0,perfects=0,mIdx=0,shieldUsed=false,lockUntil=0,lastTrick='',hintIdx=0,missT=0,startAt=0,lastTick=0,newBest=false;
 let pose={n:'ready',until:0,t0:0,d:1},trick=null,pend=null,fx=[],banner=null,trail=null,bonusT=-9,roundLanded={},lastResult=null;
 const ball={mode:'rest',x:TX-34,y:GY-BR,seg:null,tc:0,ctype:'foot',cx:0,cy:0,ang:0,vx:0,vy:0,behind:false,lerp:null,stallEnd:0};
 function setPose(n,d){pose={n,until:gt+d,t0:gt,d}}
@@ -291,10 +291,10 @@ function lerpTo(x1,y1,T,next){ball.mode='lerp';ball.lerp={x0:ball.x,y0:ball.y,x1
 function flightT(){let T=1.05-Math.min(combo,40)*.0075;if(loadout.boost==='slow'&&elapsed<10)T*=1.15;return T}
 function nextType(){const r=Math.random();if(combo>=14&&r<.2)return 'head';if(combo>=6&&r<.5)return 'knee';return 'foot'}
 // ---------- round ----------
-function startGame(){score=0;timeLeft=60;elapsed=0;combo=0;maxCombo=0;touches=0;tricksN=0;perfects=0;mIdx=0;shieldUsed=false;lockUntil=0;lastTrick='';hintIdx=0;
+function startGame(){clockOn=false;score=0;timeLeft=60;elapsed=0;combo=0;maxCombo=0;touches=0;tricksN=0;perfects=0;mIdx=0;shieldUsed=false;lockUntil=0;lastTrick='';hintIdx=0;
  trick=null;pend=null;fx=[];banner=null;trail=null;roundLanded={};newBest=false;kseq='';
  ball.mode='rest';ball.x=TX-34;ball.y=GY-BR;ball.behind=false;setPose('ready',0);st='play';t=0;startAt=gt;S.whistle();refreshGlobal()} // ball waits at her feet; the clock starts on the first tap
-function kickOff(first){setPose('kick',.28);const p=contactPt('foot');ball.x=TX-32;ball.y=GY-BR-2;flyTo(p.x,p.y,first?1.2:1.15,'foot');ball.ang=0;S.touch(false,0);S.whoosh();
+function kickOff(first){clockOn=true;setPose('kick',.28);const p=contactPt('foot');ball.x=TX-32;ball.y=GY-BR-2;flyTo(p.x,p.y,first?1.2:1.15,'foot');ball.ang=0;S.touch(false,0);S.whoosh();
  if(first){addFx('FLICK!',TX-60,GY-60,'#0ff',16,.7);for(let i=0;i<8;i++)fx.push({s:'.',x:TX-32+(Math.random()-.5)*30,y:GY-2,c:'#c8e6a0',sz:14,t0:gt,dur:.4+Math.random()*.3})}}
 function hit(perf){const type=ball.ctype;touches++;combo++;maxCombo=Math.max(maxCombo,combo);if(perf)perfects++;
  const m=mult(combo);let pts=(perf?100:50)*m;
@@ -315,7 +315,7 @@ function miss(){S.drop();if(pend){addFx('TRICK DROPPED',W/2,190,'#f66',16,1.2);p
  addFx('DROPPED!',W/2,170,'#f44',18,1)}
 function tap(tt){if(st!=='play')return;if(tt==null)tt=nowG();
  if(ball.mode==='rest'){kickOff(true);return} // first tap of the round flicks the ball up and starts the clock
- if(ball.mode!=='fly'){toast(ball.mode==='drop'?'SHE WILL FLICK IT BACK UP!':'WAIT FOR THE BALL!','#ff0');return}
+ if(ball.mode!=='fly'){toast(ball.mode==='drop'?'WAIT FOR THE BALL TO STOP':'WAIT FOR THE BALL!','#ff0');return}
  if(tt<lockUntil)return;
  const d=tt-ball.tc,w=wmul();
  if(Math.abs(d)<=PERF*w)hit(true);else if(Math.abs(d)<=GOOD*w)hit(false);
@@ -448,7 +448,7 @@ addEventListener('keydown',e=>{if(formOpen)return;const k=e.key.toLowerCase();au
 // ---------- update ----------
 function update(){t+=dt;
  if(st==='play'){
-  if(ball.mode==='rest'){} // waiting for the first tap: no clock yet
+  if(!clockOn){} // waiting for the first tap: no clock yet
   else{elapsed+=dt;timeLeft-=dt;const sec=Math.ceil(timeLeft);if(timeLeft<=5&&sec!==lastTick&&sec>0){lastTick=sec;S.tick()}
    if(hintIdx<5&&elapsed>=HINT_AT[hintIdx]){const id=TORDER[hintIdx];hintIdx++;if((save.landed[id]||0)<2&&!roundLanded[id])banner={id,t0:gt}}
    if(timeLeft<=0){timeLeft=0;timeUp()}}}
@@ -463,7 +463,7 @@ function updBall(){const b=ball;
  else if(b.mode==='drop'){b.vy+=1500*dt;b.x+=b.vx*dt;b.y+=b.vy*dt;b.ang+=b.vx*dt/BR;
   if(b.y>GY-BR){b.y=GY-BR;b.vy=Math.abs(b.vy)>90?-Math.abs(b.vy)*.45:0;b.vx*=.8}
   if(b.x<BR||b.x>W-BR){b.vx=-b.vx;b.x=Math.max(BR,Math.min(W-BR,b.x))}
-  if(st==='play'&&gt-missT>.95){b.x+=(TX-30-b.x)*.2;b.vx=0;if(gt-missT>1.25)kickOff()}}}
+  if(st==='play'&&gt-missT>.95){b.x+=(TX-34-b.x)*.2;b.vx=0;if(gt-missT>1.25){b.mode='rest';b.x=TX-34;b.y=GY-BR;b.vy=0;b.ang=0;setPose('ready',0)}}}}
 // ---------- drawing ----------
 function txt(s,x,y,sz=16,c='#fff',al='center'){g.font='bold '+sz+'px "Courier New",monospace';g.textAlign=al;g.fillStyle='#000';g.fillText(s,x+2,y+2);g.fillStyle=c;g.fillText(s,x,y)}
 const bgc=document.createElement('canvas');bgc.width=W;bgc.height=H;(function(){const c=bgc.getContext('2d');let sd=7;const rnd=()=>(sd=(sd*16807)%2147483647)/2147483647;
@@ -584,7 +584,7 @@ function loop(){const now=performance.now();dt=window.__FIXED?1/60:Math.min(.05,
  g.drawImage(bgc,0,0);led();
  if(st==='title'){drawTitle();showLogo(true);drawLogo()}else showLogo(false);
  if(st==='play'||st==='timeup'||st==='enter'){if(ball.behind)drawBall();drawTaylor();trickFX();if(!ball.behind)drawBall();ring();drawTrail();hud();drawFx();drawBanner();
-  if(st==='play'&&ball.mode==='rest'){txt(T('TAP TO FLICK IT UP','CLICK OR SPACE TO FLICK IT UP'),W/2,180,T(22,16),fr%40<26?'#ff0':'#fff');txt('THE CLOCK STARTS ON YOUR FIRST TOUCH',W/2,202,10,'#fff');
+  if(st==='play'&&ball.mode==='rest'){txt(T('TAP TO FLICK IT UP','CLICK OR SPACE TO FLICK IT UP'),W/2,180,T(22,16),fr%40<26?'#ff0':'#fff');if(!clockOn)txt('THE CLOCK STARTS ON YOUR FIRST TOUCH',W/2,202,10,'#fff');
    const ay=GY-BR-30-Math.abs(Math.sin(gt*5))*10;g.fillStyle='#ff0';g.strokeStyle='#000';g.lineWidth=2;g.beginPath();g.moveTo(ball.x-9,ay-12);g.lineTo(ball.x+9,ay-12);g.lineTo(ball.x,ay);g.closePath();g.fill();g.stroke()}
   if(st==='timeup')drawTimeup();if(st==='enter'){g.fillStyle='rgba(0,0,0,.4)';g.fillRect(0,0,W,H)}}
  if(st==='table')drawTable();if(st==='locker')drawLocker();
