@@ -585,17 +585,19 @@ function recognise(pts){let L=0;for(let i=1;i<pts.length;i++)L+=Math.hypot(pts[i
   if(runs.length&&runs[runs.length-1].d===d)runs[runs.length-1].l+=l;else runs.push({d,l})}
  const min=Math.max(12,L*.2);let s='';runs.filter(r=>r.l>=min).forEach(r=>{if(s.slice(-1)!==r.d)s+=r.d});
  if(/^(ud|du|udu|dud)$/.test(s))s=s[0]; // a real ^ or V (35px+ each way) was caught above, so this is a straight swipe with a small hook at the end
+ {const m2=Math.max(10,L*.12);let s2='';runs.filter(r=>r.l>=m2).forEach(r=>{if(s2.slice(-1)!==r.d)s2+=r.d}); // a shorter second leg still makes a 7 or an L, not a crossover
+  if(/^[lr]d$/.test(s2))return 'sroll';if(/^d[lr]$/.test(s2))return 'clip'}
  let id=classify(s);if(id)return id;
- const a=R[0],b=R[R.length-1],nx=b.x-a.x,ny=b.y-a.y;if(Math.hypot(nx,ny)>L*.6)return Math.abs(ny)>Math.abs(nx)?(ny<0?'rainbow':'neck'):'xover'; // a straight-ish diagonal swipe
+ const a=R[0],b=R[R.length-1],nx=b.x-a.x,ny=b.y-a.y;if(Math.hypot(nx,ny)>L*.6)return Math.abs(ny)>Math.abs(nx)?(ny<0?'rainbow':'neck'):Math.abs(ny)<Math.abs(nx)*.7?'xover':null; // a straight-ish diagonal swipe (crossover only if within ~35 degrees of flat)
  return null}
 function classify(s,keys){if(s==='u')return 'rainbow';if(s==='d')return 'neck';if(s==='ud'||s==='udu')return 'htw';if(s==='du'||s==='dud')return 'hdr';if(/^[lr]+$/.test(s))return 'xover';
  if(keys){if(s==='rd'||s==='ld')return 'sroll';if(s==='dr'||s==='dl')return 'clip'} // swipes decide these from the corner shape instead (see corner)
  if(s.length>=3){const r=isRot(s);if(r)return r>0?'atw':'mitchy'}return null}
 // a swipe with one clear corner: two legs of 30px+, the corner 14px+ off the straight line; each leg within ~40 degrees of an axis
 function corner(R){const a=R[0],b=R[R.length-1],ux=b.x-a.x,uy=b.y-a.y,ul=Math.hypot(ux,uy)||1;let ci=0,cd=-1;
- R.forEach((p,i)=>{const d=Math.abs((p.x-a.x)*uy-(p.y-a.y)*ux)/ul;if(d>cd){cd=d;ci=i}});if(ci<=0||ci>=R.length-1||cd<14)return null;
- const c=R[ci],v1={x:c.x-a.x,y:c.y-a.y},v2={x:b.x-c.x,y:b.y-c.y};if(Math.hypot(v1.x,v1.y)<30||Math.hypot(v2.x,v2.y)<30)return null;
- const dir=v=>Math.abs(v.x)>=Math.abs(v.y)*1.15?(v.x>0?'r':'l'):Math.abs(v.y)>=Math.abs(v.x)*1.15?(v.y>0?'d':'u'):'',d1=dir(v1),d2=dir(v2);
+ R.forEach((p,i)=>{const d=Math.abs((p.x-a.x)*uy-(p.y-a.y)*ux)/ul;if(d>cd){cd=d;ci=i}});if(ci<=0||ci>=R.length-1||cd<10)return null;
+ const c=R[ci],v1={x:c.x-a.x,y:c.y-a.y},v2={x:b.x-c.x,y:b.y-c.y};if(Math.hypot(v1.x,v1.y)<20||Math.hypot(v2.x,v2.y)<20)return null;
+ const dir=v=>Math.abs(v.x)>=Math.abs(v.y)?(v.x>0?'r':'l'):(v.y>0?'d':'u'),d1=dir(v1),d2=dir(v2);
  if((d1==='l'||d1==='r')&&d2==='d')return 'sroll';if(d1==='d'&&(d2==='l'||d2==='r'))return 'clip';return null}
 function isRot(s){const cw='urdl';let dir=0;for(let i=1;i<s.length;i++){const a=cw.indexOf(s[i-1]),b=cw.indexOf(s[i]),k=(b-a+4)%4,dd=k===1?1:k===3?-1:0;if(!dd||(dir&&dd!==dir))return 0;dir=dd}return dir} // +1 clockwise, -1 anticlockwise, 0 not a turn
 function endGesture(gs,tUp){const id=recognise(gs.pts);trail={pts:gs.pts,t0:gt,ok:id&&id!=='tap'};if(id==='tap'&&ball.mode==='fly'&&tUp-gs.t0>=HOLD_MIN&&ball.tc-gs.t0>WIN_OPEN&&gStill(gs)){trail=null;tryTrick('toe',gs.t0);return} // a short hold released before the ring fills still counts as a toe stall
