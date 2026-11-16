@@ -322,7 +322,7 @@ const TRICKS={
  clip:{n:'CLIPPER',p:550,tg:'SWIPE DOWN THEN ACROSS',kg:'DRAG DOWN+ACROSS OR DOWN,LEFT/RIGHT'},
  mitchy:{n:'MITCHY',p:700,tg:'CIRCLE ANTICLOCKWISE',kg:'ANTICLOCKWISE OR UP,LEFT,DOWN,RIGHT'}
 };
-const HOLD_T=.3,DTAP=.4; // toe stall: press and hold still this long while the ball is high; knee juggles: two taps this close while the ball is high
+const HOLD_T=.2,HOLD_MIN=.13,HOLD_R=28,DTAP=.4; // toe stall: press and hold still this long while the ball is high; knee juggles: two taps this close while the ball is high
 // chains: tricks landed on back-to-back touches (one plain touch allowed between) multiply the trick's points
 const CHAIN_STEP=.25,CHAIN_MAX=2,CHAIN_GAP=1;
 // power moves: set sequences inside a chain. First landing in a round pays in full and adds time; repeats pay half
@@ -598,7 +598,8 @@ function corner(R){const a=R[0],b=R[R.length-1],ux=b.x-a.x,uy=b.y-a.y,ul=Math.hy
  const dir=v=>Math.abs(v.x)>=Math.abs(v.y)*1.15?(v.x>0?'r':'l'):Math.abs(v.y)>=Math.abs(v.x)*1.15?(v.y>0?'d':'u'):'',d1=dir(v1),d2=dir(v2);
  if((d1==='l'||d1==='r')&&d2==='d')return 'sroll';if(d1==='d'&&(d2==='l'||d2==='r'))return 'clip';return null}
 function isRot(s){const cw='urdl';let dir=0;for(let i=1;i<s.length;i++){const a=cw.indexOf(s[i-1]),b=cw.indexOf(s[i]),k=(b-a+4)%4,dd=k===1?1:k===3?-1:0;if(!dd||(dir&&dd!==dir))return 0;dir=dd}return dir} // +1 clockwise, -1 anticlockwise, 0 not a turn
-function endGesture(gs,tUp){const id=recognise(gs.pts);trail={pts:gs.pts,t0:gt,ok:id&&id!=='tap'};if(id==='tap'){trail=null;tap(ball.mode==='fly'&&Math.abs(tUp-ball.tc)<=GOOD*wmul()?tUp:gs.t0);return}
+function endGesture(gs,tUp){const id=recognise(gs.pts);trail={pts:gs.pts,t0:gt,ok:id&&id!=='tap'};if(id==='tap'&&ball.mode==='fly'&&tUp-gs.t0>=HOLD_MIN&&ball.tc-gs.t0>WIN_OPEN&&gStill(gs)){trail=null;tryTrick('toe',gs.t0);return} // a short hold released before the ring fills still counts as a toe stall
+ if(id==='tap'){trail=null;tap(ball.mode==='fly'&&Math.abs(tUp-ball.tc)<=GOOD*wmul()?tUp:gs.t0);return}
  if(!id){toast('TRICK NOT RECOGNISED - TRY AGAIN');return}tryTrick(id,gs.t0)}
 function fireKeys(){const s=kseq;kseq='';const id=classify(s,true);if(id)tryTrick(id);else toast('TRICK NOT RECOGNISED - TRY AGAIN')}
 function menuClick(p){
@@ -646,8 +647,8 @@ addEventListener('keydown',e=>{if(formOpen)return;const k=e.key.toLowerCase();au
  else if(st==='table'){if(DIRK[k]==='l'||DIRK[k]==='r'){board=board==='world'?'mine':'world';if(board==='world')refreshGlobal(true);S.blip()}else if(go||k==='escape'){st='title';t=0}}
  else if(st==='locker'){const d=DIRK[k];if(d==='u'||d==='d'){lockSel.r=(lockSel.r+(d==='d'?1:ROWS.length-1))%ROWS.length;lockSel.c=Math.min(lockSel.c,ROWS[lockSel.r].length-1);S.blip()}
   else if(d==='l'||d==='r'){const n=ROWS[lockSel.r].length;lockSel.c=(lockSel.c+(d==='r'?1:n-1))%n;S.blip()}else if(go)equip(lockSel.r,lockSel.c);else if(k==='escape'||k==='backspace'){st='title';t=0}}});
-addEventListener('keyup',e=>{const k=e.key.toLowerCase();if((k===' '||k==='enter')&&kHold){const h=kHold;kHold=null;if(!h.done&&st==='play')tap(h.t)}});
-function gStill(gs){const p=gs.pts[0];return gs.pts.every(q=>Math.hypot(q.x-p.x,q.y-p.y)<12)}
+addEventListener('keyup',e=>{const k=e.key.toLowerCase();if((k===' '||k==='enter')&&kHold){const h=kHold;kHold=null;if(!h.done&&st==='play'){if(nowG()-h.t>=HOLD_MIN&&ball.mode==='fly')tryTrick('toe',h.t);else tap(h.t)}}});
+function gStill(gs){const p=gs.pts[0];return gs.pts.every(q=>Math.hypot(q.x-p.x,q.y-p.y)<HOLD_R)}
 // ---------- update ----------
 function update(){t+=dt;
  if(st==='play'){
